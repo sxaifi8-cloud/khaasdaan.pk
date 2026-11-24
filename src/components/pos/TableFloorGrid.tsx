@@ -93,13 +93,17 @@ export default function TableFloorGrid({ staffName = 'Cashier' }: { staffName?: 
       const activeLocOrd = ct.active_order_id
         ? localOrdersById.get(ct.active_order_id)
         : undefined;
+      const normalizedStatus = (
+        ct.status === 'free' ? 'available' : ct.status
+      ) as RestaurantTable['status'];
+
       return {
         id: ct.id,
         table_number: ct.table_number,
         table_name: ct.table_name,
         floor_area: ct.floor_area || 'Main Hall',
         capacity: 4,
-        status: ct.status,
+        status: normalizedStatus,
         active_order_id: ct.active_order_id,
         orders: activeLocOrd
           ? {
@@ -172,7 +176,6 @@ export default function TableFloorGrid({ staffName = 'Cashier' }: { staffName?: 
 
   const statusStyles: Record<string, string> = {
     available: 'border-emerald-300 bg-white hover:border-emerald-500',
-    free: 'border-emerald-300 bg-white hover:border-emerald-500',
     occupied: 'border-rose-400 bg-rose-50/70 hover:border-rose-600',
     bill_requested: 'border-amber-400 bg-amber-50 hover:border-amber-600',
     reserved: 'border-indigo-300 bg-indigo-50/60 hover:border-indigo-500',
@@ -180,7 +183,6 @@ export default function TableFloorGrid({ staffName = 'Cashier' }: { staffName?: 
 
   const badgeStyles: Record<string, string> = {
     available: 'bg-emerald-600 text-white',
-    free: 'bg-emerald-600 text-white',
     occupied: 'bg-rose-600 text-white',
     bill_requested: 'bg-amber-600 text-white',
     reserved: 'bg-indigo-600 text-white',
