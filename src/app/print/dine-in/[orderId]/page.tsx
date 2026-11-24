@@ -4,6 +4,7 @@ import React, { useEffect, useState, Suspense } from 'react';
 import { useParams } from 'next/navigation';
 import { Printer } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { offlineDb } from '@/lib/offlineDb';
 
 interface PrintableDineInOrder {
   id: string;
@@ -39,36 +40,68 @@ function PrintDineInContent() {
   useEffect(() => {
     if (!orderId) return;
     (async () => {
-      const { data } = await supabase
-        .from('orders')
-        .select(`
-          id,
-          receipt_number,
-          table_label,
-          subtotal,
-          discount_amount,
-          service_charge,
-          tax_amount,
-          total_amount,
-          payment_status,
-          payment_method,
-          punched_by,
-          opened_at,
-          order_items (
-            id,
-            item_name,
-            variant_name,
-            quantity,
-            unit_price,
-            line_total,
-            item_notes
-          )
-        `)
-        .eq('id', orderId)
-        .single();
+      let typed: PrintableDineInOrder | null = null;
+      const localRecord = await offlineDb.local_orders.get(orderId);
 
-      if (data) {
-        const typed = data as unknown as PrintableDineInOrder;
+      if (localRecord) {
+        typed = {
+          id: localRecord.id,
+          receipt_number: localRecord.receipt_number,
+          table_label: localRecord.table_label,
+          subtotal: localRecord.subtotal,
+          discount_amount: localRecord.discount_amount,
+          service_charge: localRecord.service_charge,
+          tax_amount: localRecord.tax_amount,
+          total_amount: localRecord.total_amount,
+          payment_status: localRecord.payment_status,
+          payment_method: localRecord.payment_method,
+          punched_by: localRecord.punched_by,
+          opened_at: localRecord.opened_at,
+          order_items: (localRecord.items || []).map((it) => ({
+            id: it.id,
+            item_name: it.item_name,
+            variant_name: it.variant_name,
+            quantity: it.quantity,
+            unit_price: it.unit_price,
+            line_total: it.line_total,
+            item_notes: it.item_notes,
+          })),
+        };
+      } else if (typeof navigator === 'undefined' || navigator.onLine) {
+        const { data } = await supabase
+          .from('orders')
+          .select(`
+            id,
+            receipt_number,
+            table_label,
+            subtotal,
+            discount_amount,
+            service_charge,
+            tax_amount,
+            total_amount,
+            payment_status,
+            payment_method,
+            punched_by,
+            opened_at,
+            order_items (
+              id,
+              item_name,
+              variant_name,
+              quantity,
+              unit_price,
+              line_total,
+              item_notes
+            )
+          `)
+          .eq('id', orderId)
+          .single();
+
+        if (data) {
+          typed = data as unknown as PrintableDineInOrder;
+        }
+      }
+
+      if (typed) {
         setOrder(typed);
         setFormattedDate(
           new Date(typed.opened_at).toLocaleString('en-PK', {

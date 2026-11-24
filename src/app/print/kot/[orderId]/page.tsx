@@ -4,6 +4,7 @@ import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Printer, RotateCcw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { offlineDb } from '@/lib/offlineDb';
 
 interface KotOrder {
   id: string;
@@ -14,7 +15,7 @@ interface KotOrder {
   table_label: string | null;
   customer_name: string | null;
   external_order_id: string | null;
-  notes: string | null;
+  notes?: string | null;
   punched_by: string | null;
   order_items: {
     id: string;
@@ -43,35 +44,57 @@ function PrintKotContent() {
   const loadAndMarkKot = useCallback(async () => {
     if (!orderId) return;
 
-    const { data } = await supabase
-      .from('orders')
-      .select(`
-        id,
-        receipt_series,
-        receipt_number,
-        channel,
-        order_type,
-        table_label,
-        customer_name,
-        external_order_id,
-        notes,
-        punched_by,
-        order_items (
-          id,
-          item_name,
-          variant_name,
-          kitchen_station,
-          quantity,
-          item_notes,
-          kot_printed,
-          kot_status
-        )
-      `)
-      .eq('id', orderId)
-      .single();
+    let typed: KotOrder | null = null;
+    const localRecord = await offlineDb.local_orders.get(orderId);
 
-    if (data) {
-      const typed = data as unknown as KotOrder;
+    if (localRecord) {
+      typed = {
+        id: localRecord.id,
+        receipt_series: localRecord.receipt_series,
+        receipt_number: localRecord.receipt_number,
+        channel: localRecord.channel,
+        order_type: localRecord.order_type,
+        table_label: localRecord.table_label,
+        customer_name: localRecord.customer_name,
+        external_order_id: localRecord.external_order_id || null,
+        notes: null,
+        punched_by: localRecord.punched_by,
+        order_items: localRecord.items || [],
+      };
+    } else if (typeof navigator === 'undefined' || navigator.onLine) {
+      const { data } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          receipt_series,
+          receipt_number,
+          channel,
+          order_type,
+          table_label,
+          customer_name,
+          external_order_id,
+          notes,
+          punched_by,
+          order_items (
+            id,
+            item_name,
+            variant_name,
+            kitchen_station,
+            quantity,
+            item_notes,
+            kot_printed,
+            kot_status
+          )
+        `)
+        .eq('id', orderId)
+        .single();
+
+      if (data) {
+        typed = data as unknown as KotOrder;
+      }
+    }
+
+    if (typed) {
       const activeItems = (typed.order_items || []).filter(
         (i) => i.kot_status !== 'cancelled'
       );
@@ -86,13 +109,22 @@ function PrintKotContent() {
       setIsAddOn(!reprintAll && unprintedItems.length > 0 && alreadyHadPrinted);
 
       if (unprintedItems.length > 0) {
-        await supabase
-          .from('order_items')
-          .update({ kot_printed: true })
-          .in(
-            'id',
-            unprintedItems.map((i) => i.id)
-          );
+        const unprintedIds = new Set(unprintedItems.map((i) => i.id));
+
+        if (localRecord) {
+          await offlineDb.local_orders.update(orderId, {
+            items: (localRecord.items || []).map((it) =>
+              unprintedIds.has(it.id) ? { ...it, kot_printed: true } : it
+            ),
+          });
+        }
+
+        if (typeof navigator === 'undefined' || navigator.onLine) {
+          await supabase
+            .from('order_items')
+            .update({ kot_printed: true })
+            .in('id', Array.from(unprintedIds));
+        }
       }
     }
     setLoading(false);

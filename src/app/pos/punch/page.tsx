@@ -16,6 +16,13 @@ import {
   ChefHat,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import {
+  offlineDb,
+  hydrateLocalCacheFromCloud,
+  flushSyncOutbox,
+  type CachedMenuItem,
+  type LocalOrderRecord,
+} from '@/lib/offlineDb';
 
 interface MenuVariant {
   id: string;
@@ -28,7 +35,7 @@ interface MenuEntry {
   id: string;
   name: string;
   category: string;
-  kitchen_station: 'main' | 'grill' | 'fryer' | 'drinks';
+  kitchen_station: string;
   base_price: number;
   image_url: string | null;
   is_deal?: boolean;
@@ -166,6 +173,39 @@ const STARTER_MENU: MenuEntry[] = [
   },
 ];
 
+function mapCachedMenu(rows: CachedMenuItem[]): MenuEntry[] {
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    category: row.category || 'General',
+    kitchen_station: row.kitchen_station || 'main',
+    base_price: Number(row.base_price || 0),
+    image_url: row.image_url || null,
+    is_deal: Boolean(row.is_deal),
+    variants:
+      row.variants && row.variants.length > 0
+        ? row.variants.map((v) => ({
+            id: v.id,
+            label: v.label,
+            price: Number(v.price),
+          }))
+        : [
+            {
+              id: `${row.id}-default`,
+              label: 'Standard',
+              price: Number(row.base_price || 0),
+            },
+          ],
+  }));
+}
+
+function createLocalUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `local-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 function PunchOrderContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -190,48 +230,67 @@ function PunchOrderContent() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const loadTables = useCallback(async () => {
-    const { data } = await supabase
-      .from('restaurant_tables')
-      .select('id, table_number, table_name, floor_area, status, active_order_id')
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true });
+    const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
 
-    if (data && data.length > 0) {
-      setTables(data as ActiveTableInfo[]);
+    if (isOnline) {
+      const { data, error } = await supabase
+        .from('restaurant_tables')
+        .select('id, table_number, table_name, floor_area, status, active_order_id')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        const pending = await offlineDb.sync_outbox.count();
+        if (pending === 0) {
+          await offlineDb.restaurant_tables.clear();
+          await offlineDb.restaurant_tables.bulkPut(data as ActiveTableInfo[]);
+        }
+        const cached = await offlineDb.restaurant_tables.toArray();
+        const rows = pending > 0 && cached.length > 0 ? cached : (data as ActiveTableInfo[]);
+        setTables(rows);
+        if (!selectedTableId && !initialTableId && rows.length > 0) {
+          setSelectedTableId(rows[0].id);
+        }
+        return;
+      }
+    }
+
+    const localTables = await offlineDb.restaurant_tables.toArray();
+    if (localTables.length > 0) {
+      setTables(localTables);
       if (!selectedTableId && !initialTableId) {
-        setSelectedTableId(data[0].id);
+        setSelectedTableId(localTables[0].id);
       }
     }
   }, [initialTableId, selectedTableId]);
 
   const loadMenu = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('menu_items')
-      .select(`
-        id,
-        name,
-        category,
-        kitchen_station,
-        base_price,
-        image_url,
-        is_deal,
-        is_available,
-        item_variants (
-          id,
-          label,
-          price,
-          sort_order
-        )
-      `)
-      .eq('is_available', true)
-      .order('created_at', { ascending: true });
+    const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
 
-    if (!error && data && data.length > 0) {
-      const mapped: MenuEntry[] = data.map((row: any) => {
-        const sortedVars = (row.item_variants || []).sort(
-          (a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0)
-        );
-        return {
+    if (isOnline) {
+      const { data, error } = await supabase
+        .from('menu_items')
+        .select(`
+          id,
+          name,
+          category,
+          kitchen_station,
+          base_price,
+          image_url,
+          is_deal,
+          is_available,
+          item_variants (
+            id,
+            label,
+            price,
+            sort_order
+          )
+        `)
+        .eq('is_available', true)
+        .order('created_at', { ascending: true });
+
+      if (!error && data && data.length > 0) {
+        const cachedRows: CachedMenuItem[] = data.map((row: any) => ({
           id: row.id,
           name: row.name,
           category: row.category || 'General',
@@ -239,23 +298,22 @@ function PunchOrderContent() {
           base_price: Number(row.base_price || 0),
           image_url: row.image_url || null,
           is_deal: Boolean(row.is_deal),
-          variants:
-            sortedVars.length > 0
-              ? sortedVars.map((v: any) => ({
-                  id: v.id,
-                  label: v.label,
-                  price: Number(v.price),
-                }))
-              : [
-                  {
-                    id: `${row.id}-default`,
-                    label: 'Standard',
-                    price: Number(row.base_price || 0),
-                  },
-                ],
-        };
-      });
-      setMenuItems(mapped);
+          is_available: true,
+          variants: (row.item_variants || []).sort(
+            (a: any, b: any) => (a.sort_order || 0) - (b.sort_order || 0)
+          ),
+        }));
+        await offlineDb.menu_items.clear();
+        await offlineDb.menu_items.bulkPut(cachedRows);
+        setMenuItems(mapCachedMenu(cachedRows));
+        setUsingLiveMenu(true);
+        return;
+      }
+    }
+
+    const localMenu = await offlineDb.menu_items.toArray();
+    if (localMenu.length > 0) {
+      setMenuItems(mapCachedMenu(localMenu));
       setUsingLiveMenu(true);
     } else {
       setMenuItems(STARTER_MENU);
@@ -265,6 +323,31 @@ function PunchOrderContent() {
 
   const loadTableOrder = useCallback(async (tableId: string) => {
     if (!tableId) {
+      setActiveOrder(null);
+      return null;
+    }
+
+    const localTable = await offlineDb.restaurant_tables.get(tableId);
+    if (localTable?.active_order_id) {
+      const localOrd = await offlineDb.local_orders.get(localTable.active_order_id);
+      if (localOrd && localOrd.status !== 'closed') {
+        const formatted: ActiveOrderRecord = {
+          id: localOrd.id,
+          receipt_number: localOrd.receipt_number,
+          subtotal: localOrd.subtotal,
+          discount_amount: localOrd.discount_amount,
+          service_charge: localOrd.service_charge,
+          tax_amount: localOrd.tax_amount,
+          total_amount: localOrd.total_amount,
+          payment_status: localOrd.payment_status,
+          items: localOrd.items,
+        };
+        setActiveOrder(formatted);
+        return formatted;
+      }
+    }
+
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
       setActiveOrder(null);
       return null;
     }
@@ -423,29 +506,115 @@ function PunchOrderContent() {
       item_notes: line.item_notes || null,
     }));
 
-    const { data: punchedOrderId, error } = await supabase.rpc('punch_table_items', {
+    const rpcArgs = {
       p_table_id: selectedTableId,
       p_punched_by: 'Counter Staff',
       p_items: payload,
-    });
+    };
 
-    setSubmitting(false);
+    const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
 
-    if (error) {
-      setStatusMessage(`Error punching order: ${error.message}`);
+    if (isOnline) {
+      const { data: punchedOrderId, error } = await supabase.rpc('punch_table_items', rpcArgs);
+      setSubmitting(false);
+
+      if (error) {
+        setStatusMessage(`Error punching order: ${error.message}`);
+        return;
+      }
+
+      setCart([]);
+      setStatusMessage('Order punched to table & kitchen KOT ready!');
+      const [, updatedOrder] = await Promise.all([
+        loadTables(),
+        loadTableOrder(selectedTableId),
+      ]);
+
+      const targetOrderId = punchedOrderId || updatedOrder?.id;
+      if (autoPrintKot && targetOrderId) {
+        openKotWindow(targetOrderId);
+      }
       return;
     }
 
-    setCart([]);
-    setStatusMessage('Order punched to table & kitchen KOT ready!');
-    const [, updatedOrder] = await Promise.all([
-      loadTables(),
-      loadTableOrder(selectedTableId),
-    ]);
+    // Offline path: save locally to Dexie + queue in sync_outbox
+    const tableInfo = tables.find((t) => t.id === selectedTableId);
+    const existingLocal =
+      tableInfo?.active_order_id
+        ? await offlineDb.local_orders.get(tableInfo.active_order_id)
+        : undefined;
 
-    const targetOrderId = punchedOrderId || updatedOrder?.id;
-    if (autoPrintKot && targetOrderId) {
-      openKotWindow(targetOrderId);
+    const orderId = existingLocal?.id || createLocalUuid();
+    const newLines = cart.map((line) => ({
+      id: createLocalUuid(),
+      item_name: line.item_name,
+      variant_name: line.variant_name,
+      kitchen_station: line.kitchen_station,
+      quantity: line.quantity,
+      unit_price: line.unit_price,
+      line_total: line.unit_price * line.quantity,
+      item_notes: line.item_notes || null,
+      kot_printed: false,
+      kot_status: 'queued',
+    }));
+
+    const mergedItems = [...(existingLocal?.items || []), ...newLines];
+    const nextSubtotal = mergedItems.reduce((s, it) => s + Number(it.line_total || 0), 0);
+    const nextTotal = Math.max(
+      0,
+      nextSubtotal - Number(existingLocal?.discount_amount || 0)
+    );
+
+    const nowIso = new Date().toISOString();
+    const localRecord: LocalOrderRecord = {
+      id: orderId,
+      receipt_series: 'dine_in',
+      receipt_number:
+        existingLocal?.receipt_number ||
+        `DIN-OFF-${String(Date.now()).slice(-5)}`,
+      channel: 'pos_table',
+      order_type: 'dine_in',
+      table_id: selectedTableId,
+      table_label: tableInfo
+        ? `${tableInfo.table_number} — ${tableInfo.table_name}`
+        : 'Table Order',
+      customer_name: null,
+      status: 'open',
+      payment_status: 'unpaid',
+      payment_method: null,
+      subtotal: nextSubtotal,
+      discount_amount: Number(existingLocal?.discount_amount || 0),
+      service_charge: Number(existingLocal?.service_charge || 0),
+      delivery_fee: 0,
+      tax_amount: Number(existingLocal?.tax_amount || 0),
+      platform_commission: 0,
+      total_amount: nextTotal,
+      punched_by: 'Counter Staff (Offline)',
+      opened_at: existingLocal?.opened_at || nowIso,
+      created_at: existingLocal?.created_at || nowIso,
+      items: mergedItems,
+    };
+
+    await offlineDb.local_orders.put(localRecord);
+    await offlineDb.restaurant_tables.update(selectedTableId, {
+      status: 'occupied',
+      active_order_id: orderId,
+    });
+    await offlineDb.sync_outbox.add({
+      action_type: 'PUNCH_TABLE',
+      payload: rpcArgs,
+      status: 'pending',
+      created_at: nowIso,
+    });
+
+    setSubmitting(false);
+    setCart([]);
+    setStatusMessage('Saved offline — will sync to cloud automatically when online.');
+    await loadTables();
+    await loadTableOrder(selectedTableId);
+
+    if (autoPrintKot) {
+      openKotWindow(orderId);
     }
   };
 
@@ -454,24 +623,61 @@ function PunchOrderContent() {
     setSettling(true);
     setStatusMessage(null);
 
-    const { error } = await supabase.rpc('close_table_order', {
+    const closeArgs = {
       p_table_id: selectedTableId,
       p_payment_method: paymentMethod,
       p_discount_amount: Number(discountInput || 0),
       p_service_charge: 0,
       p_tax_amount: 0,
-    });
+    };
 
-    setSettling(false);
+    const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
 
-    if (error) {
-      setStatusMessage(`Error settling bill: ${error.message}`);
+    if (isOnline) {
+      const { error } = await supabase.rpc('close_table_order', closeArgs);
+      setSettling(false);
+
+      if (error) {
+        setStatusMessage(`Error settling bill: ${error.message}`);
+        return;
+      }
+
+      setDiscountInput(0);
+      setStatusMessage(`Bill ${activeOrder.receipt_number} settled & table freed.`);
+      await Promise.all([loadTables(), loadTableOrder(selectedTableId)]);
       return;
     }
 
+    const existingLocal = await offlineDb.local_orders.get(activeOrder.id);
+    if (existingLocal) {
+      const disc = Number(discountInput || 0);
+      await offlineDb.local_orders.put({
+        ...existingLocal,
+        discount_amount: disc,
+        total_amount: Math.max(0, Number(existingLocal.subtotal || 0) - disc),
+        payment_status: 'paid',
+        payment_method: paymentMethod,
+        status: 'closed',
+      });
+    }
+
+    await offlineDb.restaurant_tables.update(selectedTableId, {
+      status: 'free',
+      active_order_id: null,
+    });
+
+    await offlineDb.sync_outbox.add({
+      action_type: 'CLOSE_TABLE',
+      payload: closeArgs,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    });
+
+    setSettling(false);
     setDiscountInput(0);
-    setStatusMessage(`Bill ${activeOrder.receipt_number} settled & table freed.`);
+    setStatusMessage(`Bill ${activeOrder.receipt_number} settled offline & queued for sync.`);
     await Promise.all([loadTables(), loadTableOrder(selectedTableId)]);
+    await flushSyncOutbox();
   };
 
   const currentTable = tables.find((t) => t.id === selectedTableId);
@@ -503,7 +709,7 @@ function PunchOrderContent() {
                     : 'bg-amber-100 text-amber-800'
                 }`}
               >
-                {usingLiveMenu ? 'Live Menu Synced' : 'Sample Menu (Add items in Admin)'}
+                {usingLiveMenu ? 'Live / Cached Menu' : 'Sample Menu (Add items in Admin)'}
               </span>
             </div>
             <p className="text-xs text-slate-500">
@@ -877,6 +1083,12 @@ function PunchOrderContent() {
 }
 
 export default function PunchOrderPage() {
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      flushSyncOutbox().then(() => hydrateLocalCacheFromCloud());
+    }
+  }, []);
+
   return (
     <Suspense fallback={<div className="p-6 text-sm text-slate-500">Loading punch screen...</div>}>
       <PunchOrderContent />

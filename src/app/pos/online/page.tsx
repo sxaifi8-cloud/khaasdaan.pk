@@ -11,6 +11,11 @@ import {
   ChefHat,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import {
+  offlineDb,
+  flushSyncOutbox,
+  type LocalOrderRecord,
+} from '@/lib/offlineDb';
 
 interface OnlineOrderRow {
   id: string;
@@ -61,6 +66,13 @@ function normalizeChannelCode(raw: string): string {
     .replace(/^_+|_+$/g, '');
 }
 
+function createLocalUuid(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `onl-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 export default function OnlineOrdersDeskPage() {
   const [orders, setOrders] = useState<OnlineOrderRow[]>([]);
   const [channels, setChannels] = useState<ChannelOption[]>(DEFAULT_CHANNELS);
@@ -87,6 +99,8 @@ export default function OnlineOrdersDeskPage() {
   const [saving, setSaving] = useState<boolean>(false);
 
   const loadChannels = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+
     const { data, error } = await supabase
       .from('order_channels')
       .select('code, name, default_type')
@@ -99,26 +113,87 @@ export default function OnlineOrdersDeskPage() {
   }, []);
 
   const loadOnlineOrders = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('orders')
-      .select(
-        'id, receipt_number, channel, order_type, external_order_id, customer_name, customer_phone, delivery_address, status, payment_status, subtotal, delivery_fee, platform_commission, total_amount, created_at'
-      )
-      .eq('receipt_series', 'online')
-      .order('created_at', { ascending: false });
+    const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
+    const localOnlineOrders = await offlineDb.local_orders
+      .where('receipt_series')
+      .equals('online')
+      .toArray();
 
-    if (error) {
-      setFetchError(error.message);
-    } else if (data) {
-      setFetchError(null);
-      setOrders(data as OnlineOrderRow[]);
+    if (isOnline) {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(
+          'id, receipt_number, channel, order_type, external_order_id, customer_name, customer_phone, delivery_address, status, payment_status, subtotal, delivery_fee, platform_commission, total_amount, created_at'
+        )
+        .eq('receipt_series', 'online')
+        .order('created_at', { ascending: false });
+
+      if (!error && data) {
+        setFetchError(null);
+        const cloudRows = data as OnlineOrderRow[];
+        const cloudIds = new Set(cloudRows.map((r) => r.id));
+        const unsyncedLocalAsRows: OnlineOrderRow[] = localOnlineOrders
+          .filter((lo) => !cloudIds.has(lo.id))
+          .map((lo) => ({
+            id: lo.id,
+            receipt_number: lo.receipt_number,
+            channel: lo.channel,
+            order_type: lo.order_type,
+            external_order_id: lo.external_order_id || null,
+            customer_name: lo.customer_name,
+            customer_phone: lo.customer_phone || null,
+            delivery_address: lo.delivery_address || null,
+            status: lo.status,
+            payment_status: lo.payment_status,
+            subtotal: lo.subtotal,
+            delivery_fee: lo.delivery_fee,
+            platform_commission: lo.platform_commission,
+            total_amount: lo.total_amount,
+            created_at: lo.created_at,
+          }));
+
+        setOrders([...unsyncedLocalAsRows, ...cloudRows]);
+        setLoading(false);
+        return;
+      }
+
+      if (error) {
+        setFetchError(error.message);
+      }
     }
+
+    const mappedLocal: OnlineOrderRow[] = localOnlineOrders
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+      .map((lo) => ({
+        id: lo.id,
+        receipt_number: lo.receipt_number,
+        channel: lo.channel,
+        order_type: lo.order_type,
+        external_order_id: lo.external_order_id || null,
+        customer_name: lo.customer_name,
+        customer_phone: lo.customer_phone || null,
+        delivery_address: lo.delivery_address || null,
+        status: lo.status,
+        payment_status: lo.payment_status,
+        subtotal: lo.subtotal,
+        delivery_fee: lo.delivery_fee,
+        platform_commission: lo.platform_commission,
+        total_amount: lo.total_amount,
+        created_at: lo.created_at,
+      }));
+    setOrders(mappedLocal);
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    loadChannels();
-    loadOnlineOrders();
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      flushSyncOutbox().then(() => {
+        loadChannels();
+        loadOnlineOrders();
+      });
+    } else {
+      loadOnlineOrders();
+    }
 
     const channelSub = supabase
       .channel('online-orders-desk-live')
@@ -177,43 +252,132 @@ export default function OnlineOrdersDeskPage() {
     try {
       const isAggregator = !['website', 'whatsapp', 'phone'].includes(channel);
       const total = baseSub + delFee;
-      const { data: inserted, error: ordErr } = await supabase
-        .from('orders')
-        .insert({
+      const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
+
+      if (isOnline) {
+        const { data: inserted, error: ordErr } = await supabase
+          .from('orders')
+          .insert({
+            receipt_series: 'online',
+            channel,
+            order_type: orderType,
+            external_order_id: externalOrderId.trim() || null,
+            customer_name: customerName.trim() || `${channel.toUpperCase()} Order`,
+            customer_phone: customerPhone.trim() || null,
+            delivery_address: deliveryAddress.trim() || null,
+            status: 'confirmed',
+            subtotal: baseSub,
+            delivery_fee: delFee,
+            platform_commission: comm,
+            total_amount: total,
+            payment_status: isAggregator ? 'paid' : 'unpaid',
+            payment_method: isAggregator ? 'aggregator_payout' : 'cash',
+            punched_by: 'Online Desk',
+          })
+          .select('id')
+          .single();
+
+        if (ordErr) throw ordErr;
+
+        const { error: itemErr } = await supabase.from('order_items').insert({
+          order_id: inserted.id,
+          item_name: itemSummaryName.trim(),
+          variant_name: channel.toUpperCase(),
+          modifiers: [],
+          kitchen_station: 'main',
+          quantity: 1,
+          unit_price: baseSub,
+          modifiers_total: 0,
+          punched_by: 'Online Desk',
+        });
+
+        if (itemErr) throw itemErr;
+      } else {
+        const localId = createLocalUuid();
+        const nowIso = new Date().toISOString();
+        const receiptNum = `ONL-OFF-${String(Date.now()).slice(-5)}`;
+        const resolvedCustomer = customerName.trim() || `${channel.toUpperCase()} Order`;
+
+        const localOrder: LocalOrderRecord = {
+          id: localId,
           receipt_series: 'online',
+          receipt_number: receiptNum,
           channel,
           order_type: orderType,
-          external_order_id: externalOrderId.trim() || null,
-          customer_name: customerName.trim() || `${channel.toUpperCase()} Order`,
+          table_id: null,
+          table_label: null,
+          customer_name: resolvedCustomer,
           customer_phone: customerPhone.trim() || null,
           delivery_address: deliveryAddress.trim() || null,
+          external_order_id: externalOrderId.trim() || null,
           status: 'confirmed',
-          subtotal: baseSub,
-          delivery_fee: delFee,
-          platform_commission: comm,
-          total_amount: total,
           payment_status: isAggregator ? 'paid' : 'unpaid',
           payment_method: isAggregator ? 'aggregator_payout' : 'cash',
-          punched_by: 'Online Desk',
-        })
-        .select('id')
-        .single();
+          subtotal: baseSub,
+          discount_amount: 0,
+          service_charge: 0,
+          delivery_fee: delFee,
+          tax_amount: 0,
+          platform_commission: comm,
+          total_amount: total,
+          punched_by: 'Online Desk (Offline)',
+          opened_at: nowIso,
+          created_at: nowIso,
+          items: [
+            {
+              id: createLocalUuid(),
+              item_name: itemSummaryName.trim(),
+              variant_name: channel.toUpperCase(),
+              kitchen_station: 'main',
+              quantity: 1,
+              unit_price: baseSub,
+              line_total: baseSub,
+              item_notes: null,
+              kot_printed: false,
+              kot_status: 'queued',
+            },
+          ],
+        };
 
-      if (ordErr) throw ordErr;
-
-      const { error: itemErr } = await supabase.from('order_items').insert({
-        order_id: inserted.id,
-        item_name: itemSummaryName.trim(),
-        variant_name: channel.toUpperCase(),
-        modifiers: [],
-        kitchen_station: 'main',
-        quantity: 1,
-        unit_price: baseSub,
-        modifiers_total: 0,
-        punched_by: 'Online Desk',
-      });
-
-      if (itemErr) throw itemErr;
+        await offlineDb.local_orders.put(localOrder);
+        await offlineDb.sync_outbox.add({
+          action_type: 'CREATE_ONLINE_ORDER',
+          payload: {
+            orderRow: {
+              id: localId,
+              receipt_series: 'online',
+              channel,
+              order_type: orderType,
+              external_order_id: externalOrderId.trim() || null,
+              customer_name: resolvedCustomer,
+              customer_phone: customerPhone.trim() || null,
+              delivery_address: deliveryAddress.trim() || null,
+              status: 'confirmed',
+              subtotal: baseSub,
+              delivery_fee: delFee,
+              platform_commission: comm,
+              total_amount: total,
+              payment_status: isAggregator ? 'paid' : 'unpaid',
+              payment_method: isAggregator ? 'aggregator_payout' : 'cash',
+              punched_by: 'Online Desk',
+              created_at: nowIso,
+            },
+            itemRow: {
+              order_id: localId,
+              item_name: itemSummaryName.trim(),
+              variant_name: channel.toUpperCase(),
+              modifiers: [],
+              kitchen_station: 'main',
+              quantity: 1,
+              unit_price: baseSub,
+              modifiers_total: 0,
+              punched_by: 'Online Desk',
+            },
+          },
+          status: 'pending',
+          created_at: nowIso,
+        });
+      }
 
       setExternalOrderId('');
       setCustomerName('');
@@ -233,14 +397,24 @@ export default function OnlineOrdersDeskPage() {
   };
 
   const handleUpdateStatus = async (orderId: string, nextStatus: string) => {
-    await supabase
-      .from('orders')
-      .update({
+    const localOrd = await offlineDb.local_orders.get(orderId);
+    if (localOrd) {
+      await offlineDb.local_orders.update(orderId, {
         status: nextStatus,
-        payment_status: nextStatus === 'completed' ? 'paid' : undefined,
-        closed_at: nextStatus === 'completed' ? new Date().toISOString() : null,
-      })
-      .eq('id', orderId);
+        payment_status: nextStatus === 'completed' ? 'paid' : localOrd.payment_status,
+      });
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.onLine) {
+      await supabase
+        .from('orders')
+        .update({
+          status: nextStatus,
+          payment_status: nextStatus === 'completed' ? 'paid' : undefined,
+          closed_at: nextStatus === 'completed' ? new Date().toISOString() : null,
+        })
+        .eq('id', orderId);
+    }
 
     loadOnlineOrders();
   };

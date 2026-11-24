@@ -238,7 +238,6 @@ export default function AdminMenuPage() {
             base_price: resolvedBasePrice,
             image_url: resolvedImageUrl,
             is_deal: isDeal,
-            updated_at: new Date().toISOString(),
           })
           .eq('id', editingItemId);
 

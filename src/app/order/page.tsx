@@ -11,10 +11,10 @@ import {
   Store,
   CheckCircle2,
   Sparkles,
-  ImageIcon,
   Clock,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import PublicSiteChrome from '@/components/public/PublicSiteChrome';
 
 interface StoreVariant {
   id: string;
@@ -54,6 +54,20 @@ interface PlacedOnlineOrder {
   total_amount: number;
   customer_name: string | null;
 }
+
+const CATEGORY_FALLBACK_IMAGES: Record<string, string> = {
+  'Karahi & Handi':
+    'https://images.unsplash.com/photo-1603894584373-5ac82b2ae398?auto=format&fit=crop&w=800&q=80',
+  'BBQ & Grill':
+    'https://images.unsplash.com/photo-1599487488170-d11ec9c172f0?auto=format&fit=crop&w=800&q=80',
+  'Fast Food':
+    'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?auto=format&fit=crop&w=800&q=80',
+  Deals:
+    'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=800&q=80',
+};
+
+const DEFAULT_STORE_IMAGE =
+  'https://images.unsplash.com/photo-1585937421612-70a008356fbe?auto=format&fit=crop&w=800&q=80';
 
 const FALLBACK_STORE_ITEMS: StoreMenuItem[] = [
   {
@@ -175,7 +189,6 @@ export default function CustomerStorefrontPage() {
     loadStoreMenu();
   }, [loadStoreMenu]);
 
-  // Live status tracking once an order is placed
   useEffect(() => {
     if (!placedOrder?.id) return;
 
@@ -345,335 +358,334 @@ export default function CustomerStorefrontPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      {/* Storefront Header */}
-      <header className="border-b border-slate-200 bg-white px-6 py-4">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">
-          <div>
-            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
-              khaasdaan.pk • Online Ordering
-            </span>
-            <h1 className="mt-1 text-xl font-extrabold text-slate-900">
-              Khaasdaan Online Menu &amp; Delivery
-            </h1>
-          </div>
+    <PublicSiteChrome>
+      <div className="bg-stone-50 text-slate-900">
+        {/* Storefront Sub-Header */}
+        <div className="border-b border-stone-200 bg-white px-4 py-4 sm:px-6">
+          <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4">
+            <div>
+              <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-bold text-amber-800">
+                www.khaasdaan.pk • Online Ordering
+              </span>
+              <h1 className="mt-1 text-xl font-extrabold text-slate-900">
+                Khaasdaan Online Menu &amp; Delivery
+              </h1>
+            </div>
 
-          <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-1">
-            <button
-              type="button"
-              onClick={() => setOrderType('delivery')}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                orderType === 'delivery'
-                  ? 'bg-slate-900 text-white'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Truck className="h-3.5 w-3.5" />
-              <span>Delivery</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setOrderType('takeaway')}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
-                orderType === 'takeaway'
-                  ? 'bg-slate-900 text-white'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              <Store className="h-3.5 w-3.5" />
-              <span>Takeaway</span>
-            </button>
+            <div className="flex items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 p-1">
+              <button
+                type="button"
+                onClick={() => setOrderType('delivery')}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                  orderType === 'delivery'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Truck className="h-3.5 w-3.5" />
+                <span>Delivery</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderType('takeaway')}
+                className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-bold transition ${
+                  orderType === 'takeaway'
+                    ? 'bg-slate-900 text-white'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Store className="h-3.5 w-3.5" />
+                <span>Takeaway</span>
+              </button>
+            </div>
           </div>
         </div>
-      </header>
 
-      <main className="mx-auto max-w-7xl p-4 md:p-6 space-y-6">
-        {/* Live Order Tracker Banner after placing an order */}
-        {placedOrder && (
-          <div className="rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-emerald-900 font-extrabold text-base">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                <span>
-                  Order Placed! Tracking ID:{' '}
-                  <span className="font-mono">{placedOrder.receipt_number}</span>
+        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 space-y-6">
+          {placedOrder && (
+            <div className="rounded-2xl border-2 border-emerald-400 bg-emerald-50 p-5 shadow-xs flex flex-wrap items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-emerald-900 font-extrabold text-base">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  <span>
+                    Order Placed! Tracking ID:{' '}
+                    <span className="font-mono">{placedOrder.receipt_number}</span>
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-800">
+                  Thank you, <strong>{placedOrder.customer_name}</strong> • Total:{' '}
+                  <strong>Rs. {placedOrder.total_amount.toLocaleString()}</strong> • Mode:{' '}
+                  <strong className="uppercase">{placedOrder.order_type}</strong>
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 border border-emerald-200">
+                <Clock className="h-4 w-4 text-emerald-600" />
+                <span className="text-xs font-bold text-slate-600">Live Status:</span>
+                <span className="rounded-full bg-emerald-600 px-3 py-0.5 text-xs font-extrabold uppercase text-white">
+                  {placedOrder.status.replace('_', ' ')}
                 </span>
               </div>
-              <p className="text-xs text-emerald-800">
-                Thank you, <strong>{placedOrder.customer_name}</strong> • Total:{' '}
-                <strong>Rs. {placedOrder.total_amount.toLocaleString()}</strong> • Mode:{' '}
-                <strong className="uppercase">{placedOrder.order_type}</strong>
-              </p>
+            </div>
+          )}
+
+          <div className="grid gap-6 lg:grid-cols-12">
+            {/* Menu Catalog */}
+            <div className="lg:col-span-8 space-y-4">
+              <div className="rounded-xl border border-stone-200 bg-white p-4 space-y-3">
+                <div className="relative">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search dishes, karahi, BBQ, deals..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full rounded-lg border border-stone-300 py-2 pl-9 pr-3 text-xs focus:border-amber-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {categories.map((cat) => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-bold ${
+                        selectedCategory === cat
+                          ? 'bg-slate-900 text-white'
+                          : 'bg-stone-100 text-slate-700 hover:bg-stone-200'
+                      }`}
+                    >
+                      {cat === 'ALL' ? 'All Items' : cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                {filteredMenu.map((item) => {
+                  const activeVarId = chosenVariantByItem[item.id] || item.variants[0]?.id;
+                  const currentVar =
+                    item.variants.find((v) => v.id === activeVarId) || item.variants[0];
+                  const imgSrc =
+                    item.image_url ||
+                    CATEGORY_FALLBACK_IMAGES[item.category] ||
+                    DEFAULT_STORE_IMAGE;
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex flex-col justify-between rounded-xl border border-stone-200 bg-white p-4 shadow-2xs"
+                    >
+                      <div>
+                        <div className="flex gap-3">
+                          <img
+                            src={imgSrc}
+                            alt={`${item.name} - Khaasdaan Faisalabad`}
+                            className="h-16 w-16 shrink-0 rounded-xl object-cover border border-stone-200"
+                          />
+
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <h3 className="text-sm font-bold text-slate-900">{item.name}</h3>
+                              {item.is_deal && (
+                                <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
+                                  <Sparkles className="h-2.5 w-2.5" /> Deal
+                                </span>
+                              )}
+                            </div>
+                            {item.description && (
+                              <p className="mt-1 line-clamp-2 text-[11px] text-slate-500">
+                                {item.description}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+
+                        {item.variants.length > 1 && (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {item.variants.map((v) => (
+                              <button
+                                key={v.id}
+                                type="button"
+                                onClick={() =>
+                                  setChosenVariantByItem((prev) => ({
+                                    ...prev,
+                                    [item.id]: v.id,
+                                  }))
+                                }
+                                className={`rounded-lg px-2.5 py-1 text-[11px] font-bold border ${
+                                  v.id === currentVar?.id
+                                    ? 'border-slate-900 bg-slate-900 text-white'
+                                    : 'border-stone-200 bg-stone-50 text-slate-700 hover:bg-stone-100'
+                                }`}
+                              >
+                                {v.label} • Rs. {v.price.toLocaleString()}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-between border-t border-stone-100 pt-3">
+                        <span className="text-sm font-extrabold text-slate-900">
+                          Rs. {Number(currentVar?.price ?? item.base_price).toLocaleString()}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => addToCart(item)}
+                          className="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-3.5 py-2 text-xs font-extrabold text-slate-950 hover:bg-amber-400"
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          <span>Add to Bag</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 border border-emerald-200">
-              <Clock className="h-4 w-4 text-emerald-600" />
-              <span className="text-xs font-bold text-slate-600">Live Status:</span>
-              <span className="rounded-full bg-emerald-600 px-3 py-0.5 text-xs font-extrabold uppercase text-white">
-                {placedOrder.status.replace('_', ' ')}
-              </span>
-            </div>
-          </div>
-        )}
+            {/* Checkout Bag Form */}
+            <form
+              onSubmit={handlePlaceOrder}
+              className="lg:col-span-4 rounded-xl border border-stone-200 bg-white p-5 shadow-2xs space-y-4 h-fit"
+            >
+              <div className="flex items-center justify-between border-b border-stone-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <ShoppingBag className="h-4 w-4 text-amber-600" />
+                  <h2 className="text-sm font-extrabold text-slate-900">Your Order Bag</h2>
+                </div>
+                <span className="rounded-full bg-stone-100 px-2.5 py-0.5 text-xs font-bold">
+                  {cart.reduce((s, i) => s + i.quantity, 0)}
+                </span>
+              </div>
 
-        <div className="grid gap-6 lg:grid-cols-12">
-          {/* Menu Catalog */}
-          <div className="lg:col-span-8 space-y-4">
-            <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-              <div className="relative">
-                <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+              {cart.length === 0 ? (
+                <p className="py-6 text-center text-xs text-slate-400">
+                  Select items from the menu to place an online order.
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {cart.map((line) => (
+                    <div
+                      key={line.key}
+                      className="flex items-center justify-between rounded-lg border border-stone-100 bg-stone-50 p-2.5 text-xs"
+                    >
+                      <div>
+                        <div className="font-bold text-slate-900">
+                          {line.item_name}
+                          {line.variant_name ? ` (${line.variant_name})` : ''}
+                        </div>
+                        <div className="text-[11px] text-slate-500">
+                          Rs. {(line.unit_price * line.quantity).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => changeQty(line.key, -1)}
+                          className="rounded border bg-white p-1"
+                        >
+                          {line.quantity === 1 ? (
+                            <Trash2 className="h-3 w-3 text-rose-600" />
+                          ) : (
+                            <Minus className="h-3 w-3" />
+                          )}
+                        </button>
+                        <span className="w-5 text-center font-bold">{line.quantity}</span>
+                        <button
+                          type="button"
+                          onClick={() => changeQty(line.key, 1)}
+                          className="rounded border bg-white p-1"
+                        >
+                          <Plus className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="space-y-2.5 border-t border-stone-100 pt-3 text-xs">
+                <input
+                  required
+                  type="text"
+                  placeholder="Your Full Name *"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                />
+                <input
+                  required
+                  type="tel"
+                  placeholder="Mobile / WhatsApp Number *"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                />
+                {orderType === 'delivery' && (
+                  <>
+                    <input
+                      type="text"
+                      placeholder="Area / Block (e.g. D Ground, Kohinoor)"
+                      value={deliveryArea}
+                      onChange={(e) => setDeliveryArea(e.target.value)}
+                      className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                    />
+                    <textarea
+                      required
+                      rows={2}
+                      placeholder="Complete Delivery Address *"
+                      value={deliveryAddress}
+                      onChange={(e) => setDeliveryAddress(e.target.value)}
+                      className="w-full rounded-lg border border-stone-300 px-3 py-2"
+                    />
+                  </>
+                )}
                 <input
                   type="text"
-                  placeholder="Search dishes, karahi, BBQ, deals..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-xs focus:border-amber-500 focus:outline-none"
+                  placeholder="Special instructions (optional)"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  className="w-full rounded-lg border border-stone-300 px-3 py-2"
                 />
               </div>
 
-              <div className="flex flex-wrap gap-1.5">
-                {categories.map((cat) => (
-                  <button
-                    key={cat}
-                    type="button"
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-bold ${
-                      selectedCategory === cat
-                        ? 'bg-slate-900 text-white'
-                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                    }`}
-                  >
-                    {cat === 'ALL' ? 'All Items' : cat}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              {filteredMenu.map((item) => {
-                const activeVarId = chosenVariantByItem[item.id] || item.variants[0]?.id;
-                const currentVar =
-                  item.variants.find((v) => v.id === activeVarId) || item.variants[0];
-
-                return (
-                  <div
-                    key={item.id}
-                    className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white p-4 shadow-2xs"
-                  >
-                    <div>
-                      <div className="flex gap-3">
-                        {item.image_url ? (
-                          <img
-                            src={item.image_url}
-                            alt={item.name}
-                            className="h-16 w-16 shrink-0 rounded-xl object-cover border border-slate-200"
-                          />
-                        ) : (
-                          <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
-                            <ImageIcon className="h-6 w-6" />
-                          </div>
-                        )}
-
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <h3 className="text-sm font-bold text-slate-900">{item.name}</h3>
-                            {item.is_deal && (
-                              <span className="inline-flex shrink-0 items-center gap-0.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-bold text-amber-800">
-                                <Sparkles className="h-2.5 w-2.5" /> Deal
-                              </span>
-                            )}
-                          </div>
-                          {item.description && (
-                            <p className="mt-1 line-clamp-2 text-[11px] text-slate-500">
-                              {item.description}
-                            </p>
-                          )}
-                        </div>
-                      </div>
-
-                      {item.variants.length > 1 && (
-                        <div className="mt-3 flex flex-wrap gap-1.5">
-                          {item.variants.map((v) => (
-                            <button
-                              key={v.id}
-                              type="button"
-                              onClick={() =>
-                                setChosenVariantByItem((prev) => ({
-                                  ...prev,
-                                  [item.id]: v.id,
-                                }))
-                              }
-                              className={`rounded-lg px-2.5 py-1 text-[11px] font-bold border ${
-                                v.id === currentVar?.id
-                                  ? 'border-slate-900 bg-slate-900 text-white'
-                                  : 'border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100'
-                              }`}
-                            >
-                              {v.label} • Rs. {v.price.toLocaleString()}
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-                      <span className="text-sm font-extrabold text-slate-900">
-                        Rs. {Number(currentVar?.price ?? item.base_price).toLocaleString()}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => addToCart(item)}
-                        className="inline-flex items-center gap-1 rounded-lg bg-amber-500 px-3.5 py-2 text-xs font-extrabold text-slate-950 hover:bg-amber-400"
-                      >
-                        <Plus className="h-3.5 w-3.5" />
-                        <span>Add to Bag</span>
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Checkout Bag Form */}
-          <form
-            onSubmit={handlePlaceOrder}
-            className="lg:col-span-4 rounded-xl border border-slate-200 bg-white p-5 shadow-2xs space-y-4 h-fit"
-          >
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <div className="flex items-center gap-2">
-                <ShoppingBag className="h-4 w-4 text-amber-600" />
-                <h2 className="text-sm font-extrabold text-slate-900">Your Order Bag</h2>
-              </div>
-              <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-bold">
-                {cart.reduce((s, i) => s + i.quantity, 0)}
-              </span>
-            </div>
-
-            {cart.length === 0 ? (
-              <p className="py-6 text-center text-xs text-slate-400">
-                Select items from the menu to place an online order.
-              </p>
-            ) : (
-              <div className="space-y-2 max-h-60 overflow-y-auto">
-                {cart.map((line) => (
-                  <div
-                    key={line.key}
-                    className="flex items-center justify-between rounded-lg border border-slate-100 bg-slate-50 p-2.5 text-xs"
-                  >
-                    <div>
-                      <div className="font-bold text-slate-900">
-                        {line.item_name}
-                        {line.variant_name ? ` (${line.variant_name})` : ''}
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        Rs. {(line.unit_price * line.quantity).toLocaleString()}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => changeQty(line.key, -1)}
-                        className="rounded border bg-white p-1"
-                      >
-                        {line.quantity === 1 ? (
-                          <Trash2 className="h-3 w-3 text-rose-600" />
-                        ) : (
-                          <Minus className="h-3 w-3" />
-                        )}
-                      </button>
-                      <span className="w-5 text-center font-bold">{line.quantity}</span>
-                      <button
-                        type="button"
-                        onClick={() => changeQty(line.key, 1)}
-                        className="rounded border bg-white p-1"
-                      >
-                        <Plus className="h-3 w-3" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="space-y-2.5 border-t border-slate-100 pt-3 text-xs">
-              <input
-                required
-                type="text"
-                placeholder="Your Full Name *"
-                value={customerName}
-                onChange={(e) => setCustomerName(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
-              <input
-                required
-                type="tel"
-                placeholder="Mobile / WhatsApp Number *"
-                value={customerPhone}
-                onChange={(e) => setCustomerPhone(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
-              {orderType === 'delivery' && (
-                <>
-                  <input
-                    type="text"
-                    placeholder="Area / Block (Optional)"
-                    value={deliveryArea}
-                    onChange={(e) => setDeliveryArea(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                  />
-                  <textarea
-                    required
-                    rows={2}
-                    placeholder="Complete Delivery Address *"
-                    value={deliveryAddress}
-                    onChange={(e) => setDeliveryAddress(e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2"
-                  />
-                </>
-              )}
-              <input
-                type="text"
-                placeholder="Special instructions (optional)"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="w-full rounded-lg border border-slate-300 px-3 py-2"
-              />
-            </div>
-
-            <div className="border-t border-slate-200 pt-3 space-y-1 text-xs">
-              <div className="flex justify-between text-slate-600">
-                <span>Subtotal:</span>
-                <span>Rs. {subtotal.toLocaleString()}</span>
-              </div>
-              {orderType === 'delivery' && (
+              <div className="border-t border-stone-200 pt-3 space-y-1 text-xs">
                 <div className="flex justify-between text-slate-600">
-                  <span>Delivery Fee:</span>
-                  <span>Rs. {deliveryFee.toLocaleString()}</span>
+                  <span>Subtotal:</span>
+                  <span>Rs. {subtotal.toLocaleString()}</span>
                 </div>
-              )}
-              <div className="flex justify-between border-t border-slate-200 pt-1.5 text-sm font-extrabold text-slate-900">
-                <span>Total Payable:</span>
-                <span>Rs. {grandTotal.toLocaleString()}</span>
+                {orderType === 'delivery' && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>Delivery Fee:</span>
+                    <span>Rs. {deliveryFee.toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-stone-200 pt-1.5 text-sm font-extrabold text-slate-900">
+                  <span>Total Payable:</span>
+                  <span>Rs. {grandTotal.toLocaleString()}</span>
+                </div>
               </div>
-            </div>
 
-            {errorMsg && (
-              <p className="rounded-lg bg-rose-50 p-2.5 text-xs font-semibold text-rose-700">
-                {errorMsg}
-              </p>
-            )}
+              {errorMsg && (
+                <p className="rounded-lg bg-rose-50 p-2.5 text-xs font-semibold text-rose-700">
+                  {errorMsg}
+                </p>
+              )}
 
-            <button
-              type="submit"
-              disabled={submitting || cart.length === 0}
-              className="w-full rounded-xl bg-slate-900 py-3 text-xs font-extrabold text-white hover:bg-slate-800 disabled:opacity-50"
-            >
-              {submitting ? 'Placing Order...' : 'Place Online Order'}
-            </button>
-          </form>
+              <button
+                type="submit"
+                disabled={submitting || cart.length === 0}
+                className="w-full rounded-xl bg-slate-900 py-3 text-xs font-extrabold text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                {submitting ? 'Placing Order...' : 'Place Online Order'}
+              </button>
+            </form>
+          </div>
         </div>
-      </main>
-    </div>
+      </div>
+    </PublicSiteChrome>
   );
 }

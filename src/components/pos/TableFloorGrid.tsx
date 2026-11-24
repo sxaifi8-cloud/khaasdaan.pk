@@ -12,6 +12,7 @@ import {
   X,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { offlineDb } from '@/lib/offlineDb';
 import ShiftTableModal, { RestaurantTable } from './ShiftTableModal';
 
 interface TableWithOrder extends RestaurantTable {
@@ -39,28 +40,80 @@ export default function TableFloorGrid({ staffName = 'Cashier' }: { staffName?: 
   const [savingTable, setSavingTable] = useState(false);
 
   const fetchTables = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('restaurant_tables')
-      .select(`
-        id,
-        table_number,
-        table_name,
-        floor_area,
-        capacity,
-        status,
-        active_order_id,
-        orders:active_order_id (
-          id,
-          receipt_number,
-          total_amount,
-          opened_at
-        )
-      `)
-      .eq('is_active', true)
-      .order('sort_order', { ascending: true });
+    const isOnline = typeof navigator === 'undefined' ? true : navigator.onLine;
+    const localOrdersList = await offlineDb.local_orders.toArray();
+    const localOrdersById = new Map(localOrdersList.map((o) => [o.id, o]));
+    const pendingOutboxCount = await offlineDb.sync_outbox.count();
 
-    if (!error && data) {
-      setTables(data as unknown as TableWithOrder[]);
+    if (isOnline) {
+      const { data, error } = await supabase
+        .from('restaurant_tables')
+        .select(`
+          id,
+          table_number,
+          table_name,
+          floor_area,
+          capacity,
+          status,
+          active_order_id,
+          orders:active_order_id (
+            id,
+            receipt_number,
+            total_amount,
+            opened_at
+          )
+        `)
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+
+      if (!error && data) {
+        const cloudRows = data as unknown as TableWithOrder[];
+
+        if (pendingOutboxCount === 0) {
+          await offlineDb.restaurant_tables.clear();
+          await offlineDb.restaurant_tables.bulkPut(
+            cloudRows.map((t) => ({
+              id: t.id,
+              table_number: t.table_number,
+              table_name: t.table_name,
+              floor_area: t.floor_area || 'Main Hall',
+              status: t.status,
+              active_order_id: t.active_order_id,
+            }))
+          );
+          setTables(cloudRows);
+          setLoading(false);
+          return;
+        }
+      }
+    }
+
+    const cachedTables = await offlineDb.restaurant_tables.toArray();
+    const merged: TableWithOrder[] = cachedTables.map((ct) => {
+      const activeLocOrd = ct.active_order_id
+        ? localOrdersById.get(ct.active_order_id)
+        : undefined;
+      return {
+        id: ct.id,
+        table_number: ct.table_number,
+        table_name: ct.table_name,
+        floor_area: ct.floor_area || 'Main Hall',
+        capacity: 4,
+        status: ct.status,
+        active_order_id: ct.active_order_id,
+        orders: activeLocOrd
+          ? {
+              id: activeLocOrd.id,
+              receipt_number: activeLocOrd.receipt_number,
+              total_amount: activeLocOrd.total_amount,
+              opened_at: activeLocOrd.opened_at,
+            }
+          : null,
+      };
+    });
+
+    if (merged.length > 0) {
+      setTables(merged);
     }
     setLoading(false);
   }, []);
@@ -119,6 +172,7 @@ export default function TableFloorGrid({ staffName = 'Cashier' }: { staffName?: 
 
   const statusStyles: Record<string, string> = {
     available: 'border-emerald-300 bg-white hover:border-emerald-500',
+    free: 'border-emerald-300 bg-white hover:border-emerald-500',
     occupied: 'border-rose-400 bg-rose-50/70 hover:border-rose-600',
     bill_requested: 'border-amber-400 bg-amber-50 hover:border-amber-600',
     reserved: 'border-indigo-300 bg-indigo-50/60 hover:border-indigo-500',
@@ -126,6 +180,7 @@ export default function TableFloorGrid({ staffName = 'Cashier' }: { staffName?: 
 
   const badgeStyles: Record<string, string> = {
     available: 'bg-emerald-600 text-white',
+    free: 'bg-emerald-600 text-white',
     occupied: 'bg-rose-600 text-white',
     bill_requested: 'bg-amber-600 text-white',
     reserved: 'bg-indigo-600 text-white',

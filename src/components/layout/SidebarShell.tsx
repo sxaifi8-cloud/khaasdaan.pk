@@ -11,22 +11,25 @@ import {
   ChefHat,
   Layers,
   BarChart3,
+  ShieldCheck,
   Store,
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
   X,
 } from 'lucide-react';
+import SyncStatusBadge from '@/components/pos/SyncStatusBadge';
 
 const NAV_ITEMS = [
-  { label: 'Command Center', href: '/', icon: LayoutDashboard },
+  { label: 'Command Center', href: '/pos', icon: LayoutDashboard },
   { label: 'Dine-In Tables', href: '/pos/tables', icon: UtensilsCrossed },
   { label: 'Table Order Punch', href: '/pos/punch', icon: PlusCircle },
   { label: 'Online & Foodpanda', href: '/pos/online', icon: Globe },
   { label: 'Kitchen Display (KDS)', href: '/kitchen', icon: ChefHat },
   { label: 'Menu, Variants & Deals', href: '/admin/menu', icon: Layers },
   { label: 'Sales & Reports', href: '/admin/reports', icon: BarChart3 },
-  { label: 'Customer Website', href: '/order', icon: Store },
+  { label: 'Role Settings', href: '/admin/settings', icon: ShieldCheck },
+  { label: 'Public Storefront', href: '/', icon: Store },
 ];
 
 export default function SidebarShell({ children }: { children: React.ReactNode }) {
@@ -46,8 +49,15 @@ export default function SidebarShell({ children }: { children: React.ReactNode }
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Hide sidebar completely on 80mm thermal print routes
-  if (pathname?.startsWith('/print')) {
+  // Hide POS sidebar on 80mm thermal print routes and public website routes
+  if (
+    pathname === '/' ||
+    pathname?.startsWith('/print') ||
+    pathname?.startsWith('/menu') ||
+    pathname?.startsWith('/order') ||
+    pathname?.startsWith('/about') ||
+    pathname?.startsWith('/contact')
+  ) {
     return <>{children}</>;
   }
 
@@ -70,7 +80,7 @@ export default function SidebarShell({ children }: { children: React.ReactNode }
         {/* Brand Header + Hide/Collapse Button */}
         <div className="flex h-16 items-center justify-between border-b border-slate-800 px-3.5">
           {!collapsed && (
-            <Link href="/" className="flex items-center gap-2.5 overflow-hidden">
+            <Link href="/pos" className="flex items-center gap-2.5 overflow-hidden">
               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-500 font-black text-slate-950">
                 K
               </div>
@@ -139,8 +149,10 @@ export default function SidebarShell({ children }: { children: React.ReactNode }
           })}
         </nav>
 
-        {/* Bottom Hide Bar Button & Shortcut Hint */}
-        <div className="border-t border-slate-800 p-2.5">
+        {/* Bottom Sync Status, Hide Bar Button & Shortcut Hint */}
+        <div className="border-t border-slate-800 p-2.5 space-y-2">
+          {!collapsed && <SyncStatusBadge />}
+
           <button
             type="button"
             onClick={() => setCollapsed((prev) => !prev)}
@@ -167,19 +179,25 @@ export default function SidebarShell({ children }: { children: React.ReactNode }
 
       {/* Main Content Area */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Mobile Top Bar Toggle */}
-        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5 lg:hidden">
-          <button
-            type="button"
-            onClick={() => setMobileOpen(true)}
-            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-800"
-          >
-            <Menu className="h-4 w-4" />
-            <span>Menu</span>
-          </button>
-          <span className="text-xs font-extrabold tracking-wide text-slate-900">
-            KHAASDAAN.PK
-          </span>
+        {/* Top Bar with Sync Status on Desktop & Mobile */}
+        <div className="flex items-center justify-between gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-800 lg:hidden"
+            >
+              <Menu className="h-4 w-4" />
+              <span>Menu</span>
+            </button>
+            <span className="text-xs font-extrabold tracking-wide text-slate-900 lg:hidden">
+              KHAASDAAN.PK
+            </span>
+          </div>
+
+          <div className="ml-auto">
+            <SyncStatusBadge />
+          </div>
         </div>
 
         <div className="flex-1">{children}</div>
