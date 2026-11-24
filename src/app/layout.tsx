@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import React, { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import SidebarShell from "@/components/layout/SidebarShell";
@@ -27,7 +28,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body suppressHydrationWarning className="min-h-full flex flex-col">
-        <SidebarShell>{children}</SidebarShell>
+        <Suspense fallback={<div className="min-h-full flex-1">{children}</div>}>
+          <SidebarShell>{children}</SidebarShell>
+        </Suspense>
       </body>
     </html>
   );

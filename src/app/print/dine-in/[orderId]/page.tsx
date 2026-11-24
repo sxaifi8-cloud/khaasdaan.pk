@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useParams } from 'next/navigation';
 import { Printer } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -29,10 +29,11 @@ interface PrintableDineInOrder {
   }[];
 }
 
-export default function PrintDineInReceiptPage() {
+function PrintDineInContent() {
   const params = useParams<{ orderId: string }>();
   const orderId = params?.orderId;
   const [order, setOrder] = useState<PrintableDineInOrder | null>(null);
+  const [formattedDate, setFormattedDate] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -67,7 +68,14 @@ export default function PrintDineInReceiptPage() {
         .single();
 
       if (data) {
-        setOrder(data as unknown as PrintableDineInOrder);
+        const typed = data as unknown as PrintableDineInOrder;
+        setOrder(typed);
+        setFormattedDate(
+          new Date(typed.opened_at).toLocaleString('en-PK', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          })
+        );
       }
       setLoading(false);
     })();
@@ -80,11 +88,6 @@ export default function PrintDineInReceiptPage() {
   if (!order) {
     return <div className="p-6 text-xs text-rose-600">Dine-in receipt not found.</div>;
   }
-
-  const formattedDate = new Date(order.opened_at).toLocaleString('en-PK', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
 
   return (
     <div className="min-h-screen bg-slate-200 p-4 print:bg-white print:p-0">
@@ -116,7 +119,7 @@ export default function PrintDineInReceiptPage() {
           <div className="text-base font-extrabold tracking-wide">KHAASDAAN</div>
           <div className="text-[10px]">khaasdaan.pk</div>
           <div className="mt-1 text-xs font-extrabold">{order.receipt_number}</div>
-          <div className="text-[10px]">{formattedDate}</div>
+          {formattedDate && <div className="text-[10px]">{formattedDate}</div>}
         </div>
 
         <div className="border-b border-dashed border-black py-2 space-y-0.5">
@@ -197,5 +200,13 @@ export default function PrintDineInReceiptPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PrintDineInReceiptPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-xs text-slate-600">Loading dine-in bill...</div>}>
+      <PrintDineInContent />
+    </Suspense>
   );
 }

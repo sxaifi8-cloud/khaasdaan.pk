@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useParams } from 'next/navigation';
 import { Printer } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -35,10 +35,11 @@ interface PrintableOnlineOrder {
   }[];
 }
 
-export default function PrintOnlineReceiptPage() {
+function PrintOnlineContent() {
   const params = useParams<{ orderId: string }>();
   const orderId = params?.orderId;
   const [order, setOrder] = useState<PrintableOnlineOrder | null>(null);
+  const [formattedDate, setFormattedDate] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -79,7 +80,14 @@ export default function PrintOnlineReceiptPage() {
         .single();
 
       if (data) {
-        setOrder(data as unknown as PrintableOnlineOrder);
+        const typed = data as unknown as PrintableOnlineOrder;
+        setOrder(typed);
+        setFormattedDate(
+          new Date(typed.created_at).toLocaleString('en-PK', {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+          })
+        );
       }
       setLoading(false);
     })();
@@ -95,14 +103,9 @@ export default function PrintOnlineReceiptPage() {
 
   const isTakeaway = order.order_type === 'takeaway';
   const topBannerLabel = isTakeaway ? 'TAKEAWAY / COLLECTION' : 'ONLINE ORDER';
-  const formattedDate = new Date(order.created_at).toLocaleString('en-PK', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
 
   return (
     <div className="min-h-screen bg-slate-200 p-4 print:bg-white print:p-0">
-      {/* Screen-only Print Controls */}
       <div className="mx-auto mb-4 flex w-[80mm] items-center justify-between print:hidden">
         <button
           type="button"
@@ -121,22 +124,18 @@ export default function PrintOnlineReceiptPage() {
         </button>
       </div>
 
-      {/* 80mm Thermal Slip */}
       <div className="mx-auto w-[80mm] bg-white p-3 font-mono text-[11px] leading-snug text-black shadow print:shadow-none">
-        {/* Top Order Type Banner */}
         <div className="mb-2 border-2 border-black bg-black py-1 text-center text-xs font-extrabold tracking-wider text-white print:bg-white print:text-black">
           *** {topBannerLabel} ***
         </div>
 
-        {/* Restaurant Header */}
         <div className="border-b border-dashed border-black pb-2 text-center">
           <div className="text-base font-extrabold tracking-wide">KHAASDAAN</div>
           <div className="text-[10px]">khaasdaan.pk</div>
           <div className="mt-1 text-xs font-extrabold">{order.receipt_number}</div>
-          <div className="text-[10px]">{formattedDate}</div>
+          {formattedDate && <div className="text-[10px]">{formattedDate}</div>}
         </div>
 
-        {/* Channel & Customer Details */}
         <div className="border-b border-dashed border-black py-2 space-y-0.5">
           <div>
             <strong>Source:</strong> {order.channel.replace('_', ' ').toUpperCase()}
@@ -176,7 +175,6 @@ export default function PrintOnlineReceiptPage() {
           )}
         </div>
 
-        {/* Itemized Lines */}
         <div className="border-b border-dashed border-black py-2 space-y-1.5">
           <div className="flex justify-between border-b border-black pb-1 text-[10px] font-bold">
             <span>ITEM</span>
@@ -201,7 +199,6 @@ export default function PrintOnlineReceiptPage() {
           ))}
         </div>
 
-        {/* Totals */}
         <div className="pt-2 space-y-1">
           <div className="flex justify-between">
             <span>Subtotal</span>
@@ -245,5 +242,13 @@ export default function PrintOnlineReceiptPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PrintOnlineReceiptPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-xs text-slate-600">Loading receipt...</div>}>
+      <PrintOnlineContent />
+    </Suspense>
   );
 }
