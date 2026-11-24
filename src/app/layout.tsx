@@ -55,9 +55,9 @@ const RESTAURANT_SCHEMA = {
   priceRange: "$$",
   address: {
     "@type": "PostalAddress",
-    streetAddress: "D Ground Commercial Area",
+    streetAddress: "Main Satiana Road, Near McDonalds & 1122 Office" ,
     addressLocality: "Faisalabad",
-    addressRegion: "Punjab",
+    addressRegion: "Punjab", 
     addressCountry: "PK",
   },
   areaServed: [

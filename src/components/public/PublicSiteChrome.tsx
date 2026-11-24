@@ -194,7 +194,7 @@ export default function PublicSiteChrome({ children }: { children: React.ReactNo
             <div className="space-y-2 text-xs text-slate-400">
               <p className="flex items-start gap-2">
                 <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-400" />
-                <span>D Ground Commercial Area, Faisalabad, Pakistan</span>
+                <span><span> Main Satiana Road, Near McDonalds, 1122 Office, Faisalabad, Pakistan</span> </span>
               </p>
               <p className="flex items-center gap-2">
                 <Clock className="h-3.5 w-3.5 shrink-0 text-amber-400" />

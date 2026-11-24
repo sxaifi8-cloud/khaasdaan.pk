@@ -47,7 +47,7 @@ export default function ContactPage() {
                     Restaurant Location
                   </h2>
                   <p className="mt-1 text-xs text-slate-600">
-                    D Ground Commercial Area, Faisalabad, Punjab, Pakistan
+                    Main Satiana Road, Near McDonald&apos;s &amp; 1122 Office, Faisalabad, Punjab, Pakistan
                   </p>
                 </div>
               </div>

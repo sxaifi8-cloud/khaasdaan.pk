@@ -87,7 +87,7 @@ export default function HomePage() {
             </h1>
 
             <p className="max-w-xl text-sm leading-relaxed text-slate-300 sm:text-base">
-              Experience authentic Pakistani Karahi, smoky live charcoal BBQ, and generous family Dastarkhwan deals in D Ground, Faisalabad—available for family dine-in, takeaway, and fast doorstep delivery.
+              Experience authentic Pakistani Karahi, smoky live charcoal BBQ, and generous family Dastarkhwan deals in Main Satiana Road, Faisalabad—available for family dine-in, takeaway, and fast doorstep delivery.
             </p>
 
             <div className="flex flex-wrap items-center gap-3 pt-1">
