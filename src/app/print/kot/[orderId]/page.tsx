@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import { Printer, RotateCcw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -28,7 +28,7 @@ interface KotOrder {
   }[];
 }
 
-export default function PrintKotPage() {
+function PrintKotContent() {
   const params = useParams<{ orderId: string }>();
   const searchParams = useSearchParams();
   const orderId = params?.orderId;
@@ -37,6 +37,7 @@ export default function PrintKotPage() {
   const [order, setOrder] = useState<KotOrder | null>(null);
   const [itemsToPrint, setItemsToPrint] = useState<KotOrder['order_items']>([]);
   const [isAddOn, setIsAddOn] = useState(false);
+  const [timeNow, setTimeNow] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
   const loadAndMarkKot = useCallback(async () => {
@@ -84,7 +85,6 @@ export default function PrintKotPage() {
       setItemsToPrint(selected);
       setIsAddOn(!reprintAll && unprintedItems.length > 0 && alreadyHadPrinted);
 
-      // Mark newly printed items as kot_printed = true
       if (unprintedItems.length > 0) {
         await supabase
           .from('order_items')
@@ -99,6 +99,12 @@ export default function PrintKotPage() {
   }, [orderId, reprintAll]);
 
   useEffect(() => {
+    setTimeNow(
+      new Date().toLocaleTimeString('en-PK', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    );
     loadAndMarkKot();
   }, [loadAndMarkKot]);
 
@@ -119,14 +125,8 @@ export default function PrintKotPage() {
     ? 'KOT - TAKEAWAY / COLLECTION'
     : `KOT - ONLINE (${order.channel.toUpperCase()})`;
 
-  const timeNow = new Date().toLocaleTimeString('en-PK', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-
   return (
     <div className="min-h-screen bg-slate-200 p-4 print:bg-white print:p-0">
-      {/* Screen-Only Controls */}
       <div className="mx-auto mb-4 flex w-[80mm] items-center justify-between gap-2 print:hidden">
         <a
           href={`/print/kot/${order.id}?reprint=1`}
@@ -146,7 +146,6 @@ export default function PrintKotPage() {
         </button>
       </div>
 
-      {/* 80mm Hard-Copy Kitchen Slip (No Prices) */}
       <div className="mx-auto w-[80mm] bg-white p-3 font-mono text-black shadow print:shadow-none">
         <div className="border-2 border-black bg-black py-1.5 text-center text-xs font-extrabold tracking-wide text-white print:bg-white print:text-black">
           {headerBanner}
@@ -159,7 +158,7 @@ export default function PrintKotPage() {
               : order.customer_name || order.channel.toUpperCase()}
           </div>
           <div className="text-xs font-bold">
-            {order.receipt_number} • Time: {timeNow}
+            {order.receipt_number} {timeNow ? `• Time: ${timeNow}` : ''}
           </div>
           {order.external_order_id && (
             <div className="text-xs font-bold">Ref: #{order.external_order_id}</div>
@@ -172,7 +171,6 @@ export default function PrintKotPage() {
           </div>
         )}
 
-        {/* Large Font Kitchen Items */}
         <div className="py-2.5 space-y-2.5">
           {itemsToPrint.map((item) => (
             <div key={item.id} className="border-b border-dashed border-black pb-2">
@@ -205,5 +203,13 @@ export default function PrintKotPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function PrintKotPage() {
+  return (
+    <Suspense fallback={<div className="p-6 text-xs text-slate-600">Preparing Kitchen KOT...</div>}>
+      <PrintKotContent />
+    </Suspense>
   );
 }
